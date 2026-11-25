@@ -1,0 +1,6 @@
+{
+  "name": "EraEarn",
+  "description": "EraEarn institutional dark-mode crypto & wealth investment platform with automated ROI tiers, real-time portfolio tracking, secure Web3 blockchain verification, and full admin operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

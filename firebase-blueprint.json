@@ -1,0 +1,184 @@
+{
+  "entities": {
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized platform administrator record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "role": { "type": "string", "enum": ["super_admin", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "InvestmentPlan": {
+      "title": "InvestmentPlan",
+      "description": "EraEarn tiered monthly ROI investment plan",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "tierCode": { "type": "string", "enum": ["CORE", "PRIME", "INSTITUTIONAL"] },
+        "minAmount": { "type": "number" },
+        "maxAmount": { "type": "number" },
+        "minMonthlyRoi": { "type": "number" },
+        "maxMonthlyRoi": { "type": "number" },
+        "lockDays": { "type": "number" },
+        "payoutCycle": { "type": "string", "enum": ["daily_accrual", "monthly_settlement"] },
+        "description": { "type": "string", "minLength": 5, "maxLength": 400 },
+        "isActive": { "type": "boolean" },
+        "sortOrder": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "name", "tierCode", "minAmount", "maxAmount", "minMonthlyRoi", "maxMonthlyRoi", "lockDays", "payoutCycle", "description", "isActive", "sortOrder", "updatedAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Investor account profile, balances, referral hierarchy, and verified blockchain address",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "email": { "type": "string", "format": "email", "maxLength": 200 },
+        "photoURL": { "type": "string", "maxLength": 500 },
+        "availableBalance": { "type": "number" },
+        "totalInvested": { "type": "number" },
+        "totalEarned": { "type": "number" },
+        "referralCode": { "type": "string", "minLength": 4, "maxLength": 32 },
+        "referralEarnings": { "type": "number" },
+        "referredByUid": { "type": "string", "maxLength": 128 },
+        "referredByL2Uid": { "type": "string", "maxLength": 128 },
+        "referredByL3Uid": { "type": "string", "maxLength": 128 },
+        "referredByCode": { "type": "string", "maxLength": 32 },
+        "walletAddress": { "type": "string", "maxLength": 128 },
+        "walletVerified": { "type": "boolean" },
+        "kycStatus": { "type": "string", "enum": ["unverified", "pending", "verified", "suspended"] },
+        "role": { "type": "string", "enum": ["investor", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "displayName", "email", "availableBalance", "totalInvested", "totalEarned", "referralCode", "referralEarnings", "walletVerified", "kycStatus", "role", "createdAt", "updatedAt"]
+    },
+    "ReferralCodeRecord": {
+      "title": "ReferralCodeRecord",
+      "description": "Publicly resolvable referral code mapping to investor UID and upline chain",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "minLength": 4, "maxLength": 32, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "ownerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "ownerName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "uplineL2Uid": { "type": "string", "maxLength": 128 },
+        "uplineL3Uid": { "type": "string", "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "ownerUid", "ownerName", "createdAt"]
+    },
+    "ReferralCommission": {
+      "title": "ReferralCommission",
+      "description": "3-level referral commission (5% L1, 3% L2, 2% L3) generated on downline investments",
+      "type": "object",
+      "properties": {
+        "beneficiaryUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "level": { "type": "number" },
+        "ratePercent": { "type": "number" },
+        "investmentAmount": { "type": "number" },
+        "commissionAmount": { "type": "number" },
+        "status": { "type": "string", "enum": ["claimable", "claimed"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["beneficiaryUid", "fromUid", "fromEmail", "level", "ratePercent", "investmentAmount", "commissionAmount", "status", "createdAt", "updatedAt"]
+    },
+    "Investment": {
+      "title": "Investment",
+      "description": "Active or matured user investment position",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "planId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[a-zA-Z0-9_-]+$" },
+        "planName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "principal": { "type": "number" },
+        "monthlyRoi": { "type": "number" },
+        "lockDays": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "matured", "closed"] },
+        "lastClaimedAt": { "type": "string", "format": "date-time" },
+        "totalClaimed": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userEmail", "planId", "planName", "principal", "monthlyRoi", "lockDays", "status", "lastClaimedAt", "totalClaimed", "createdAt", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Deposit, withdrawal, investment allocation, yield claim, or referral bonus ledger record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userEmail": { "type": "string", "format": "email", "maxLength": 200 },
+        "type": { "type": "string", "enum": ["deposit", "withdrawal", "investment", "yield_claim", "referral_bonus", "admin_credit"] },
+        "amount": { "type": "number" },
+        "asset": { "type": "string", "enum": ["USD", "USDC", "USDT", "ETH"] },
+        "network": { "type": "string", "maxLength": 64 },
+        "txHash": { "type": "string", "maxLength": 128 },
+        "toAddress": { "type": "string", "maxLength": 128 },
+        "status": { "type": "string", "enum": ["pending", "completed", "rejected"] },
+        "note": { "type": "string", "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userEmail", "type", "amount", "asset", "status", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "Real-time user notification alert",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "message": { "type": "string", "minLength": 1, "maxLength": 400 },
+        "category": { "type": "string", "enum": ["yield", "wallet", "security", "system"] },
+        "isRead": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "category", "isRead", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Platform administrator accounts"
+    },
+    "/plans/{planId}": {
+      "schema": { "$ref": "#/entities/InvestmentPlan" },
+      "description": "Publicly readable investment tier configurations managed by admins"
+    },
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private investor profiles, wallet bindings, referral chain, and account balances"
+    },
+    "/referral_codes/{code}": {
+      "schema": { "$ref": "#/entities/ReferralCodeRecord" },
+      "description": "Referral code lookup records for 3-level attribution"
+    },
+    "/referral_commissions/{commissionId}": {
+      "schema": { "$ref": "#/entities/ReferralCommission" },
+      "description": "3-level referral bonus commissions (5% L1, 3% L2, 2% L3)"
+    },
+    "/investments/{investmentId}": {
+      "schema": { "$ref": "#/entities/Investment" },
+      "description": "Active and matured investment positions per user"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Financial ledger entries for deposits, withdrawals, investments, yield claims, and referral bonuses"
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "User-scoped notifications and admin announcements"
+    }
+  }
+}

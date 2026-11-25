@@ -1,0 +1,435 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Core Primitives ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isBootstrapAdmin() {
+      return isEmailVerified() && request.auth.token.email == 'bikkimallaone@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrapAdmin() || (isEmailVerified() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    // --- Entity Validation Blueprints ---
+    function isValidAdminRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'role', 'createdAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && data.role in ['super_admin', 'admin']
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPlan(data) {
+      return data.keys().hasAll(['id', 'name', 'tierCode', 'minAmount', 'maxAmount', 'minMonthlyRoi', 'maxMonthlyRoi', 'lockDays', 'payoutCycle', 'description', 'isActive', 'sortOrder', 'updatedAt'])
+        && data.keys().hasOnly(['id', 'name', 'tierCode', 'minAmount', 'maxAmount', 'minMonthlyRoi', 'maxMonthlyRoi', 'lockDays', 'payoutCycle', 'description', 'isActive', 'sortOrder', 'updatedAt'])
+        && isValidId(data.id)
+        && data.name is string && data.name.size() >= 2 && data.name.size() <= 80
+        && data.tierCode in ['CORE', 'PRIME', 'INSTITUTIONAL']
+        && data.minAmount is number && data.minAmount >= 10 && data.minAmount <= 100000000
+        && data.maxAmount is number && data.maxAmount >= data.minAmount && data.maxAmount <= 100000000
+        && data.minMonthlyRoi is number && data.minMonthlyRoi > 0 && data.minMonthlyRoi <= 50
+        && data.maxMonthlyRoi is number && data.maxMonthlyRoi >= data.minMonthlyRoi && data.maxMonthlyRoi <= 50
+        && data.lockDays is number && data.lockDays >= 1 && data.lockDays <= 3650
+        && data.payoutCycle in ['daily_accrual', 'monthly_settlement']
+        && data.description is string && data.description.size() >= 5 && data.description.size() <= 400
+        && data.isActive is bool
+        && data.sortOrder is number && data.sortOrder >= 0 && data.sortOrder <= 100
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'email', 'availableBalance', 'totalInvested', 'totalEarned', 'referralCode', 'referralEarnings', 'walletVerified', 'kycStatus', 'role', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'displayName', 'email', 'photoURL', 'availableBalance', 'totalInvested', 'totalEarned', 'referralCode', 'referralEarnings', 'referredByUid', 'referredByL2Uid', 'referredByL3Uid', 'referredByCode', 'walletAddress', 'walletVerified', 'kycStatus', 'role', 'createdAt', 'updatedAt'])
+        && data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 200
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && data.availableBalance is number && data.availableBalance >= 0 && data.availableBalance <= 100000000
+        && data.totalInvested is number && data.totalInvested >= 0 && data.totalInvested <= 100000000
+        && data.totalEarned is number && data.totalEarned >= 0 && data.totalEarned <= 100000000
+        && data.referralCode is string && data.referralCode.size() >= 4 && data.referralCode.size() <= 32
+        && data.referralEarnings is number && data.referralEarnings >= 0 && data.referralEarnings <= 100000000
+        && (!('referredByUid' in data) || (data.referredByUid is string && data.referredByUid.size() <= 128))
+        && (!('referredByL2Uid' in data) || (data.referredByL2Uid is string && data.referredByL2Uid.size() <= 128))
+        && (!('referredByL3Uid' in data) || (data.referredByL3Uid is string && data.referredByL3Uid.size() <= 128))
+        && (!('referredByCode' in data) || (data.referredByCode is string && data.referredByCode.size() <= 32))
+        && (!('walletAddress' in data) || (data.walletAddress is string && data.walletAddress.size() <= 128))
+        && data.walletVerified is bool
+        && data.kycStatus in ['unverified', 'pending', 'verified', 'suspended']
+        && data.role in ['investor', 'admin']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidReferralCode(data) {
+      return data.keys().hasAll(['code', 'ownerUid', 'ownerName', 'createdAt'])
+        && data.keys().hasOnly(['code', 'ownerUid', 'ownerName', 'uplineL2Uid', 'uplineL3Uid', 'createdAt'])
+        && isValidId(data.code)
+        && data.code.size() >= 4 && data.code.size() <= 32
+        && data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128
+        && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 120
+        && (!('uplineL2Uid' in data) || (data.uplineL2Uid is string && data.uplineL2Uid.size() <= 128))
+        && (!('uplineL3Uid' in data) || (data.uplineL3Uid is string && data.uplineL3Uid.size() <= 128))
+        && data.createdAt is timestamp;
+    }
+
+    function isValidReferralCommission(data) {
+      return data.keys().hasAll(['beneficiaryUid', 'fromUid', 'fromEmail', 'level', 'ratePercent', 'investmentAmount', 'commissionAmount', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['beneficiaryUid', 'fromUid', 'fromEmail', 'level', 'ratePercent', 'investmentAmount', 'commissionAmount', 'status', 'createdAt', 'updatedAt'])
+        && data.beneficiaryUid is string && data.beneficiaryUid.size() >= 1 && data.beneficiaryUid.size() <= 128
+        && data.fromUid is string && data.fromUid.size() >= 1 && data.fromUid.size() <= 128
+        && data.fromEmail is string && data.fromEmail.size() >= 3 && data.fromEmail.size() <= 200
+        && data.level in [1, 2, 3]
+        && data.ratePercent in [5, 3, 2]
+        && data.investmentAmount is number && data.investmentAmount >= 100 && data.investmentAmount <= 100000000
+        && data.commissionAmount is number && data.commissionAmount > 0 && data.commissionAmount <= 10000000
+        && data.status in ['claimable', 'claimed']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidInvestment(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'planId', 'planName', 'principal', 'monthlyRoi', 'lockDays', 'status', 'lastClaimedAt', 'totalClaimed', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'userEmail', 'planId', 'planName', 'principal', 'monthlyRoi', 'lockDays', 'status', 'lastClaimedAt', 'totalClaimed', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200
+        && isValidId(data.planId)
+        && data.planName is string && data.planName.size() >= 2 && data.planName.size() <= 80
+        && data.principal is number && data.principal >= 100 && data.principal <= 100000000
+        && data.monthlyRoi is number && data.monthlyRoi >= 1 && data.monthlyRoi <= 50
+        && data.lockDays is number && data.lockDays >= 1 && data.lockDays <= 3650
+        && data.status in ['active', 'matured', 'closed']
+        && data.lastClaimedAt is timestamp
+        && data.totalClaimed is number && data.totalClaimed >= 0 && data.totalClaimed <= 100000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll(['userId', 'userEmail', 'type', 'amount', 'asset', 'status', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['userId', 'userEmail', 'type', 'amount', 'asset', 'network', 'txHash', 'toAddress', 'status', 'note', 'createdAt', 'updatedAt'])
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.userEmail is string && data.userEmail.size() >= 3 && data.userEmail.size() <= 200
+        && data.type in ['deposit', 'withdrawal', 'investment', 'yield_claim', 'referral_bonus', 'admin_credit']
+        && data.amount is number && data.amount > 0 && data.amount <= 100000000
+        && data.asset in ['USD', 'USDC', 'USDT', 'ETH']
+        && (!('network' in data) || (data.network is string && data.network.size() <= 64))
+        && (!('txHash' in data) || (data.txHash is string && data.txHash.size() <= 128))
+        && (!('toAddress' in data) || (data.toAddress is string && data.toAddress.size() <= 128))
+        && data.status in ['pending', 'completed', 'rejected']
+        && (!('note' in data) || (data.note is string && data.note.size() <= 300))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidNotification(data) {
+      return data.keys().hasAll(['userId', 'title', 'message', 'category', 'isRead', 'createdAt'])
+        && data.keys().hasOnly(['userId', 'title', 'message', 'category', 'isRead', 'createdAt'])
+        && data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 400
+        && data.category in ['yield', 'wallet', 'security', 'system']
+        && data.isRead is bool
+        && data.createdAt is timestamp;
+    }
+
+    // --- Collection: admins ---
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isSignedIn() && (isOwner(adminId) || isAdmin());
+      allow list: if isAdmin();
+      allow create: if isValidId(adminId) && isAdmin() && isValidAdminRecord(incoming())
+        && incoming().uid == adminId && incoming().createdAt == request.time;
+      allow update: if isValidId(adminId) && isAdmin() && isValidAdminRecord(incoming())
+        && incoming().uid == existing().uid && incoming().createdAt == existing().createdAt;
+      allow delete: if isValidId(adminId) && isAdmin() && adminId != request.auth.uid;
+    }
+
+    // --- Collection: plans ---
+    match /plans/{planId} {
+      allow get: if isValidId(planId);
+      allow list: if true;
+      allow create: if isValidId(planId) && isAdmin() && isValidPlan(incoming())
+        && incoming().id == planId && incoming().updatedAt == request.time;
+      allow update: if isValidId(planId) && isAdmin() && isValidPlan(incoming())
+        && incoming().id == existing().id && incoming().updatedAt == request.time;
+      allow delete: if isValidId(planId) && isAdmin();
+    }
+
+    // --- Collection: referral_codes ---
+    match /referral_codes/{code} {
+      allow get: if isValidId(code);
+      allow list: if isAdmin();
+      allow create: if isValidId(code) && isEmailVerified() && isValidReferralCode(incoming())
+        && incoming().code == code
+        && incoming().ownerUid == request.auth.uid
+        && incoming().createdAt == request.time;
+      allow update, delete: if isValidId(code) && isAdmin();
+    }
+
+    // --- Collection: referral_commissions ---
+    match /referral_commissions/{commissionId} {
+      allow get: if isValidId(commissionId) && isSignedIn() && (
+        existing().beneficiaryUid == request.auth.uid
+        || existing().fromUid == request.auth.uid
+        || isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.beneficiaryUid == request.auth.uid
+        || resource.data.fromUid == request.auth.uid
+        || isAdmin()
+      );
+
+      allow create: if isValidId(commissionId) && isEmailVerified() && isValidReferralCommission(incoming())
+        && incoming().status == 'claimable'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            incoming().fromUid == request.auth.uid
+            && incoming().beneficiaryUid != request.auth.uid
+            && (
+              (incoming().level == 1 && incoming().ratePercent == 5)
+              || (incoming().level == 2 && incoming().ratePercent == 3)
+              || (incoming().level == 3 && incoming().ratePercent == 2)
+            )
+          )
+        );
+
+      allow update: if isValidId(commissionId) && isEmailVerified() && isValidReferralCommission(incoming())
+        && incoming().beneficiaryUid == existing().beneficiaryUid
+        && incoming().fromUid == existing().fromUid
+        && incoming().level == existing().level
+        && incoming().ratePercent == existing().ratePercent
+        && incoming().commissionAmount == existing().commissionAmount
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            existing().beneficiaryUid == request.auth.uid
+            && existing().status == 'claimable'
+            && incoming().status == 'claimed'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isValidId(commissionId) && isAdmin();
+    }
+
+    // --- Collection: users ---
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isValidId(userId) && isEmailVerified() && isValidUser(incoming()) && (
+        isAdmin() || (
+          isOwner(userId)
+          && incoming().uid == request.auth.uid
+          && incoming().email == request.auth.token.email
+          && incoming().availableBalance == 0
+          && incoming().totalInvested == 0
+          && incoming().totalEarned == 0
+          && incoming().referralEarnings == 0
+          && incoming().walletVerified == false
+          && incoming().kycStatus == 'unverified'
+          && incoming().role == 'investor'
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+        )
+      );
+
+      allow update: if isValidId(userId) && isEmailVerified() && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            isOwner(userId)
+            && incoming().role == existing().role
+            && incoming().kycStatus == existing().kycStatus
+            && (
+              // Action 1: Update profile details
+              incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'updatedAt'])
+              ||
+              // Action 2: Bind/verify blockchain wallet address
+              incoming().diff(existing()).affectedKeys().hasOnly(['walletAddress', 'walletVerified', 'updatedAt'])
+              ||
+              // Action 3: Initialize referral code/earnings (backfill) or bind upline referral chain once
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['referralCode', 'referralEarnings', 'referredByUid', 'referredByL2Uid', 'referredByL3Uid', 'referredByCode', 'updatedAt'])
+                && (!('referralCode' in existing()) || incoming().referralCode == existing().referralCode)
+                && (
+                  ('referralEarnings' in existing() && incoming().referralEarnings == existing().referralEarnings)
+                  || (!('referralEarnings' in existing()) && incoming().referralEarnings == 0)
+                )
+                && (!('referredByCode' in existing()) || incoming().referredByCode == existing().referredByCode)
+              )
+              ||
+              // Action 4: Invest from availableBalance (conserves balance + invested sum)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'totalInvested', 'updatedAt'])
+                && incoming().availableBalance < existing().availableBalance
+                && incoming().totalInvested > existing().totalInvested
+                && math.abs((existing().availableBalance - incoming().availableBalance) - (incoming().totalInvested - existing().totalInvested)) <= 0.01
+              )
+              ||
+              // Action 5: Automated Deposit settlement (bounded per deposit)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'updatedAt'])
+                && incoming().availableBalance > existing().availableBalance
+                && (incoming().availableBalance - existing().availableBalance) <= 100000
+              )
+              ||
+              // Action 6: Automated / queued withdrawal (strictly decreases availableBalance)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'updatedAt'])
+                && incoming().availableBalance < existing().availableBalance
+              )
+              ||
+              // Action 7: Claim accrued yield (bounded to active invested capital)
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'totalEarned', 'updatedAt'])
+                && existing().totalInvested > 0
+                && incoming().availableBalance > existing().availableBalance
+                && incoming().totalEarned > existing().totalEarned
+                && math.abs((incoming().availableBalance - existing().availableBalance) - (incoming().totalEarned - existing().totalEarned)) <= 0.01
+                && (incoming().availableBalance - existing().availableBalance) <= (existing().totalInvested * 0.25 + 0.01)
+              )
+              ||
+              // Action 8: Claim 3-level referral commission into availableBalance
+              (
+                incoming().diff(existing()).affectedKeys().hasOnly(['availableBalance', 'referralEarnings', 'totalEarned', 'updatedAt'])
+                && incoming().availableBalance > existing().availableBalance
+                && incoming().referralEarnings > existing().referralEarnings
+                && math.abs((incoming().availableBalance - existing().availableBalance) - (incoming().referralEarnings - existing().referralEarnings)) <= 0.01
+                && math.abs((incoming().totalEarned - existing().totalEarned) - (incoming().referralEarnings - existing().referralEarnings)) <= 0.01
+                && (incoming().referralEarnings - existing().referralEarnings) <= 25000
+              )
+            )
+          )
+        );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // --- Collection: investments ---
+    match /investments/{investmentId} {
+      allow get: if isValidId(investmentId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(investmentId) && isEmailVerified() && isValidInvestment(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().lastClaimedAt == request.time
+        && incoming().totalClaimed == 0
+        && incoming().status == 'active'
+        && exists(/databases/$(database)/documents/plans/$(incoming().planId))
+        && incoming().principal >= get(/databases/$(database)/documents/plans/$(incoming().planId)).data.minAmount
+        && incoming().principal <= get(/databases/$(database)/documents/plans/$(incoming().planId)).data.maxAmount
+        && incoming().monthlyRoi >= get(/databases/$(database)/documents/plans/$(incoming().planId)).data.minMonthlyRoi
+        && incoming().monthlyRoi <= get(/databases/$(database)/documents/plans/$(incoming().planId)).data.maxMonthlyRoi
+        && (isAdmin() || incoming().userId == request.auth.uid);
+
+      allow update: if isValidId(investmentId) && isEmailVerified() && isValidInvestment(incoming())
+        && incoming().userId == existing().userId
+        && incoming().userEmail == existing().userEmail
+        && incoming().planId == existing().planId
+        && incoming().principal == existing().principal
+        && incoming().monthlyRoi == existing().monthlyRoi
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            existing().userId == request.auth.uid
+            && existing().status == 'active'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['lastClaimedAt', 'totalClaimed', 'updatedAt'])
+            && incoming().totalClaimed > existing().totalClaimed
+            && incoming().lastClaimedAt == request.time
+          )
+        );
+
+      allow delete: if isValidId(investmentId) && isAdmin();
+    }
+
+    // --- Collection: transactions ---
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(transactionId) && isEmailVerified() && isValidTransaction(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && (
+          isAdmin() || (
+            incoming().userId == request.auth.uid
+            && (
+              (incoming().type in ['deposit', 'withdrawal'] && incoming().status in ['pending', 'completed'])
+              || (incoming().type in ['investment', 'yield_claim', 'referral_bonus'] && incoming().status == 'completed')
+            )
+          )
+        );
+
+      allow update: if isValidId(transactionId) && isAdmin() && isValidTransaction(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (existing().status == 'pending' || isAdmin());
+
+      allow delete: if isValidId(transactionId) && isAdmin();
+    }
+
+    // --- Collection: notifications ---
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(notificationId) && isEmailVerified() && isValidNotification(incoming())
+        && incoming().createdAt == request.time
+        && (isAdmin() || (incoming().userId == request.auth.uid && incoming().isRead == false));
+
+      allow update: if isValidId(notificationId) && isEmailVerified() && isValidNotification(incoming())
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && (
+          isAdmin() || (
+            existing().userId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])
+          )
+        );
+
+      allow delete: if isValidId(notificationId) && isSignedIn() && (existing().userId == request.auth.uid || isAdmin());
+    }
+  }
+}
